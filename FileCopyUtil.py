@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 '''
 Script that takes a list of patient identifiers, and searches a given path recursively for all paths that contain a patient identifier. Outputs
 paths by patient identifier in tab-delimited format to specified file and copies the patient folders into a new folder that is created in the same 
@@ -37,28 +39,28 @@ def check_zip(name, zip_file):
 
     return False
 
-# UI flow
-def setup_ui(skip_col=True, skip_exc=True):
+# UI flow. Returns 1 if manually cancelled, returns -1 if terminated with error, returns 0 if completed without errors.
+def setup_ui(skip_col=False, skip_exc=False):
     if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs. '
-                        'It will copy these files/folders to a separate directory. MRNs must be stored in an .xlsx or .xls format.\n'
-                        'WARNING: This assumes MRNs do not begin with 0 and have a fixed number of digits.\n'
-                        'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file.')):
-        exit(0)
+                        'It will copy these files/folders to separate folders for each MRN. MRNs must be stored in an .xlsx or .xls format.\n'
+                        'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file.\n'
+                        'WARNING: This assumes MRNs do not begin with 0 and have a fixed number of digits.')):
+        return None
 
     mrn_src = easygui.fileopenbox(msg='Choose patient data sheet.', filetypes=["*.xlsx", "*.xls"])
     if mrn_src is None:
-        exit(0)
+        return None
 
     if skip_col:
         col = 0
     else:
         col = easygui.integerbox(msg='Enter the column with patient MRNs (A=0, B=1, etc): ')
         if col is None:
-            exit(0)
+            return None
 
     search_path = easygui.diropenbox(msg='Select a folder to search.')
     if search_path is None:
-        exit(0)
+        return None
 
     if skip_exc:
         exc_dirs = []
@@ -69,7 +71,7 @@ def setup_ui(skip_col=True, skip_exc=True):
             if len(exc_dirs) == 1 and exc_dirs[0] == '':
                 exc_dirs = []
         except:
-            exit(0)
+            return None
 
     # Get list of MRNs to search
     ws = xlrd.open_workbook(mrn_src).sheet_by_index(0)
@@ -78,9 +80,9 @@ def setup_ui(skip_col=True, skip_exc=True):
         print(patient_ids)
     except:
         easygui.msgbox("Parsing error. May be due to wrong column selected or non-numeric entry present. This program will now exit.")
-        exit(1)
+        return None
 
-    return patient_ids, search_path, exc_dirs
+    return [patient_ids, search_path, exc_dirs]
 
 # Get matching files and directories for each MRN
 def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
@@ -178,7 +180,11 @@ def main():
     copy_dir = 'FileCopyResults'
 
     # Ask user for inputs
-    patient_ids, search_path, exc_dirs = setup_ui()
+    ret = setup_ui()
+    if ret is None:
+        return
+    else:
+        [patient_ids, search_path, exc_dirs] = ret
 
     # Get matching files and directories for each MRN
     paths_by_patient_id = get_matching_paths(patient_ids, search_path, exc_dirs)
