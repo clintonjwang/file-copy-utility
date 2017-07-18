@@ -1,9 +1,11 @@
 Help on module FileCopyUtil:
 
 NAME
+
     FileCopyUtil
 
 DESCRIPTION
+
     Script that takes a list of patient identifiers, and searches a given path
     recursively for all paths that contain a patient identifier. Outputs paths by
     patient identifier in tab-delimited format to specified file and copies the
@@ -17,6 +19,7 @@ DESCRIPTION
     location  as well.
 
 FUNCTIONS
+
     check_zip(name, zip_file)
         Check if any zip file members contain a target string in their filename.
     
@@ -39,21 +42,8 @@ FUNCTIONS
     write_to_csv(paths_by_patient_id, output_csv, pause_before_copy=False)
         Write MRNs and matching paths to a csv.
     
-    writer(...)
-        csv_writer = csv.writer(fileobj [, dialect='excel']
-                                    [optional keyword args])
-            for row in sequence:
-                csv_writer.writerow(row)
-        
-            [or]
-        
-            csv_writer = csv.writer(fileobj [, dialect='excel']
-                                    [optional keyword args])
-            csv_writer.writerows(rows)
-        
-        The "fileobj" argument can be any object that supports the file API.
-
 FILE
+
     /Users/clintonwang/Documents/Work/FileCopyUtil.py
 
 
