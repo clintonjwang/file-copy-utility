@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
-'''
-Script that takes a list of patient identifiers, and searches a given path recursively for all paths that contain a patient identifier. Outputs
-paths by patient identifier in tab-delimited format to specified file and copies the patient folders into a new folder that is created in the same 
-location as where the file is run.
+""" Script that takes a list of patient identifiers, and searches a given path
+recursively for all paths that contain a patient identifier. Outputs paths by
+patient identifier in tab-delimited format to specified file and copies the
+patient folders into a new folder that is created in the same  location as where
+the file is run.
 
-Note: Before running this script, move its location into the drive or directory where you want the copied files to reside. This will likely be on an external
-hard drive unless your computer has lots of additional hard drive space. You should also move the excel document with the list of patient MRN's into this location 
-as well.
-'''
+Note: Before running this script, move its location into the drive or directory
+where you want the copied files to reside. This will likely be on an external
+hard drive unless your computer has lots of additional hard drive space. You
+should also move the excel document with the list of patient MRN's into this
+location  as well. """
 
-#import the libraries needed to run script
 from shutil import copytree, copyfile
 import xlrd
 import os
@@ -19,8 +20,8 @@ import easygui
 from zipfile import ZipFile
 import time
 
-# return all members of name_list that contain name
 def find_name_in_list(name, name_list, root=None):
+    """Return all members of a list of strings that contain a target string."""
     matches = []
     for item_name in name_list:
         if name in item_name:
@@ -30,8 +31,8 @@ def find_name_in_list(name, name_list, root=None):
 
     return matches
 
-# return true if any zip file members contain name
 def check_zip(name, zip_file):
+    """Check if any zip file members contain a target string in their filename."""
     zip_members = ZipFile(zip_file).namelist()
     for item_name in zip_members:
         if name in item_name:
@@ -39,8 +40,9 @@ def check_zip(name, zip_file):
 
     return False
 
-# UI flow. Returns 1 if manually cancelled, returns -1 if terminated with error, returns 0 if completed without errors.
 def setup_ui(skip_col=False, skip_exc=False):
+    """UI flow. Returns 1 if manually cancelled, returns -1 if terminated
+    with error, returns 0 if completed without errors."""
     if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs. '
                         'It will copy these files/folders to separate folders for each MRN. MRNs must be stored in an .xlsx or .xls format.\n'
                         'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file.\n'
@@ -84,8 +86,8 @@ def setup_ui(skip_col=False, skip_exc=False):
 
     return [patient_ids, search_path, exc_dirs]
 
-# Get matching files and directories for each MRN
 def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
+    """Get matching files and directories for each MRN."""
     t1 = time.time()
     # dict to store matching paths
     paths_by_patient_id = dict((patient_id, []) for patient_id in patient_ids)
@@ -126,8 +128,8 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
 
     return paths_by_patient_id
 
-# write MRNs and matching paths to a csv
 def write_to_csv(paths_by_patient_id, output_csv, pause_before_copy=False):
+    """Write MRNs and matching paths to a csv."""
     with open(output_csv, 'w') as f:
         csv_writer = writer(f)
         for patient_id in paths_by_patient_id:
@@ -139,8 +141,8 @@ def write_to_csv(paths_by_patient_id, output_csv, pause_before_copy=False):
     else:
         print("Matches written to ", output_csv, ". Starting to copy matching files.", sep="")
 
-# Write matching files to new directory
 def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
+    """Write matching files to new directory."""
     t1 = time.time()
     potential_duplicates = []
 
@@ -175,6 +177,7 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
         easygui.msgbox('Copy complete.')
 
 def main():
+    """Starting point for script"""
     # Default parameters. Can be converted to UI options if necessary.
     output_csv = 'FileCopyDirectory.csv'
     copy_dir = 'FileCopyResults'
