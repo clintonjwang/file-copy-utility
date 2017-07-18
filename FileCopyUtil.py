@@ -10,26 +10,37 @@ as well.
 
 #import the libraries needed to run script
 from shutil import copytree, copyfile
-import argparse
 import xlrd
 import os
 from csv import writer
 import easygui
+from zipfile import ZipFile
 
 # return all members of name_list that contain name
-def find_name_in_list(name, name_list):
+def find_name_in_list(name, name_list, root=None):
     matches = []
     for item_name in name_list:
         if name in item_name:
             matches.append(item_name)
+        elif item_name.endswith('.zip') and check_zip(name, root+'/'+item_name):
+            matches.append(item_name)
 
     return matches
+
+def check_zip(name, zip_file):
+    zip_members = ZipFile(zip_file).namelist()
+    for item_name in zip_members:
+        if name in item_name:
+            return True
+
+    return False
 
 # UI flow
 def setup_ui(skip_col=True, skip_exc=True):
     if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs. '
-                        'It will copy these files/folders to a separate directory. MRNs must be stored in an .xlsx or .xls format. '
-                        'WARNING: This assumes MRNs do not begin with 0 and have a fixed number of digits.')):
+                        'It will copy these files/folders to a separate directory. MRNs must be stored in an .xlsx or .xls format.\n'
+                        'WARNING: This assumes MRNs do not begin with 0 and have a fixed number of digits.\n'
+                        'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file.')):
         exit(0)
 
     mrn_src = easygui.fileopenbox(msg='Choose patient data sheet.', filetypes=["*.xlsx", "*.xls"])
@@ -89,7 +100,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
 
         for patient_id in patient_ids:
             matching_dirs = find_name_in_list(patient_id, subdirs)
-            matching_files = find_name_in_list(patient_id, files)
+            matching_files = find_name_in_list(patient_id, files, root)
 
             for matching_dir in matching_dirs:
                 paths_by_patient_id[patient_id].append(root + '/' + matching_dir)
@@ -105,7 +116,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
             print(dir_cnt, " directories explored, ", match_file_cnt, " matching files found, and ", match_dir_cnt,
                 " matching folders found. (Last directory explored: ", root, ")", sep="")
 
-    print("Search complete. ", dir_cnt, " directories explored and ", match_file_cnt,
+    print("Search complete. ", dir_cnt, " directories explored, ", match_file_cnt,
         " matching files found, and ", match_dir_cnt, " matching folders found.", sep="")
 
     return paths_by_patient_id
@@ -153,7 +164,7 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
         with open('duplicates.log', 'w') as f:
             f.write('\n'.join(potential_duplicates))
     else:
-        easygui.msgbox('Copy complete. Please report any issues or requests at https://github.com/clintonjwang/glowing-octo-potato/issues')
+        easygui.msgbox('Copy complete.')
 
 def main():
     # Default parameters. Can be converted to UI options if necessary.
