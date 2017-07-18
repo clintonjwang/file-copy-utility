@@ -4,7 +4,7 @@ paths by patient identifier in tab-delimited format to specified file and copies
 location as where the file is run.
 
 Note: Before running this script, move its location into the drive or directory where you want the copied files to reside. This will likely be on an external
-hard drive unless your computer has lots of addition hard drive space. You should also move the excel document with the list of patient MRN's into this location 
+hard drive unless your computer has lots of additional hard drive space. You should also move the excel document with the list of patient MRN's into this location 
 as well.
 '''
 
@@ -15,6 +15,7 @@ import os
 from csv import writer
 import easygui
 from zipfile import ZipFile
+import time
 
 # return all members of name_list that contain name
 def find_name_in_list(name, name_list, root=None):
@@ -27,6 +28,7 @@ def find_name_in_list(name, name_list, root=None):
 
     return matches
 
+# return true if any zip file members contain name
 def check_zip(name, zip_file):
     zip_members = ZipFile(zip_file).namelist()
     for item_name in zip_members:
@@ -82,6 +84,7 @@ def setup_ui(skip_col=True, skip_exc=True):
 
 # Get matching files and directories for each MRN
 def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
+    t1 = time.time()
     # dict to store matching paths
     paths_by_patient_id = dict((patient_id, []) for patient_id in patient_ids)
 
@@ -117,7 +120,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
                 " matching folders found. (Last directory explored: ", root, ")", sep="")
 
     print("Search complete. ", dir_cnt, " directories explored, ", match_file_cnt,
-        " matching files found, and ", match_dir_cnt, " matching folders found.", sep="")
+        " matching files found, and ", match_dir_cnt, " matching folders found. Time it took to run: " + str(time.time() - t1) + " s.\n", sep="")
 
     return paths_by_patient_id
 
@@ -136,6 +139,7 @@ def write_to_csv(paths_by_patient_id, output_csv, pause_before_copy=False):
 
 # Write matching files to new directory
 def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
+    t1 = time.time()
     potential_duplicates = []
 
     for patient_id in paths_by_patient_id:
@@ -158,6 +162,8 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
                     copytree(match, new_path)
                 except:
                     potential_duplicates.append(os.path.basename(match) + '/')
+
+    print("Copy complete. Time it took to run: " + str(time.time() - t1) + " s.\n", sep="")
 
     if len(potential_duplicates) > 0:
         easygui.msgbox('Copy complete. Potential file duplicates detected. Only the first one found was copied. See duplicates.log file.')
