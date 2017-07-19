@@ -12,6 +12,8 @@ hard drive unless your computer has lots of additional hard drive space. You
 should also move the excel document with the list of patient MRN's into this
 location  as well. """
 
+# TODO(clintonjwang): Account for MRNs starting with 0
+
 from shutil import copytree, copyfile
 import xlrd
 import os
@@ -20,7 +22,7 @@ import easygui
 from zipfile import ZipFile
 import time
 
-def find_name_in_list(name, name_list, root=None):
+def find_number_in_filename(name, name_list, root=None):
     """Return all members of a list of strings that contain a target string."""
     matches = []
     for item_name in name_list:
@@ -106,8 +108,8 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
                 subdirs.remove(exc_dir)
 
         for patient_id in patient_ids:
-            matching_dirs = find_name_in_list(patient_id, subdirs)
-            matching_files = find_name_in_list(patient_id, files, root)
+            matching_dirs = find_number_in_filename(patient_id, subdirs)
+            matching_files = find_number_in_filename(patient_id, files, root)
 
             for matching_dir in matching_dirs:
                 paths_by_patient_id[patient_id].append(root + '/' + matching_dir)
