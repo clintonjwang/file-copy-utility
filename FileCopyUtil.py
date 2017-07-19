@@ -14,37 +14,65 @@ location  as well. """
 
 # TODO(clintonjwang): Account for MRNs starting with 0
 
-from shutil import copytree, copyfile
-import xlrd
-import os
-from csv import writer
+from csv import writer as _writer
 import easygui
-from zipfile import ZipFile
+import os
+import re
+from shutil import copytree, copyfile
 import time
+from xlrd import open_workbook
+from zipfile import ZipFile
 
-def find_number_in_filename(name, name_list, root=None):
-    """Return all members of a list of strings that contain a target string."""
+logname = "FileCopyLogs.log"
+
+def find_number_in_filename(mrn, name_list, root=None):
+    """Return all members of a list of strings that contain a target MRN.
+
+    name_list: list of filenames and dir names to compare mrn against
+    mrn: mrn to search for, integer expected
+
+    If mrn = 550, matching names will include 't2scans550_01' and '00550.txt'
+    but exclude 'mri1550' and '5500.txt'.
+    .zip files in name_list will also be included if one of its members
+    is considered a match."""
+    mrn = str(mrn)
+
     matches = []
-    for item_name in name_list:
-        if name in item_name:
-            matches.append(item_name)
-        elif item_name.endswith('.zip') and check_zip(name, root+'/'+item_name):
-            matches.append(item_name)
+    for filename in name_list:
+        if _mrn_in_name(mrn, filename):
+            matches.append(filename)
+        elif filename.endswith('.zip') and _check_zip(mrn, root+'/'+filename):
+            matches.append(filename)
 
     return matches
 
-def check_zip(name, zip_file):
+def _write_to_log(msg, print_to_screen=True):
+    """Append message to a file."""
+    with open(logname, 'a') as f:
+        f.write(msg + "\n")
+
+    if print_to_screen:
+        print(msg)
+
+def _mrn_in_name(mrn, filename):
+    """Determines if an MRN (string, no leading zeros) is contained within a filename."""
+    if mrn not in filename:
+        return False
+    else:
+        return re.search("^(.*[^0-9])?0*" + str(mrn) + "([^0-9].*)?$", filename) is not None
+
+def _check_zip(mrn, zip_file):
     """Check if any zip file members contain a target string in their filename."""
     zip_members = ZipFile(zip_file).namelist()
-    for item_name in zip_members:
-        if name in item_name:
+    for filename in zip_members:
+        if _mrn_in_name(mrn, filename):
             return True
 
     return False
 
 def setup_ui(skip_col=False, skip_exc=False):
-    """UI flow. Returns 1 if manually cancelled, returns -1 if terminated
-    with error, returns 0 if completed without errors."""
+    """UI flow. Returns None if cancelled or terminated with error, else returns
+    patient_ids, search_path and directories to exclude."""
     if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs. '
                         'It will copy these files/folders to separate folders for each MRN. MRNs must be stored in an .xlsx or .xls format.\n'
                         'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file.\n'
@@ -78,13 +106,14 @@ def setup_ui(skip_col=False, skip_exc=False):
             return None
 
     # Get list of MRNs to search
-    ws = xlrd.open_workbook(mrn_src).sheet_by_index(0)
+    ws = open_workbook(mrn_src).sheet_by_index(0)
     try:
-        patient_ids = [str(int(ws.cell(i, col).value)) for i in range(ws.nrows)]
-        print(patient_ids)
+        patient_ids = [int(ws.cell(i, col).value) for i in range(ws.nrows)]
     except:
         easygui.msgbox("Parsing error. May be due to wrong column selected or non-numeric entry present. This program will now exit.")
         return None
+
+    _write_to_log("Searching for the following patients: " + str(patient_ids))
 
     return [patient_ids, search_path, exc_dirs]
 
@@ -121,19 +150,19 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
                 match_file_cnt += 1
 
         dir_cnt += 1
-        if show_progress and dir_cnt % 10 == 1:
-            print(dir_cnt, " directories explored, ", match_file_cnt, " matching files found, and ", match_dir_cnt,
-                " matching folders found. (Last directory explored: ", root, ")", sep="")
+        if show_progress and dir_cnt % 50 == 1:
+            _write_to_log(("%d directories explored, %d matching files found, and %d matching folders found. "
+                            "(Last directory explored: %s)") % (dir_cnt, match_file_cnt, match_dir_cnt, root))
 
-    print("Search complete. ", dir_cnt, " directories explored, ", match_file_cnt,
-        " matching files found, and ", match_dir_cnt, " matching folders found. Time it took to run: " + str(time.time() - t1) + " s.\n", sep="")
+    _write_to_log(("Search complete. %d directories explored, %d matching files found, and %d matching folders found. "
+            "Time it took to run: %.4f s.\n") % (dir_cnt, match_file_cnt, match_dir_cnt, time.time() - t1))
 
     return paths_by_patient_id
 
 def write_to_csv(paths_by_patient_id, output_csv, pause_before_copy=False):
     """Write MRNs and matching paths to a csv."""
     with open(output_csv, 'w') as f:
-        csv_writer = writer(f)
+        csv_writer = _writer(f)
         for patient_id in paths_by_patient_id:
             csv_writer.writerow([patient_id] + paths_by_patient_id[patient_id])
 
@@ -141,7 +170,7 @@ def write_to_csv(paths_by_patient_id, output_csv, pause_before_copy=False):
         if not easygui.ynbox("Matches written to " + output_csv + ". Copy matching files to a new directory?"):
             exit(0)
     else:
-        print("Matches written to ", output_csv, ". Starting to copy matching files.", sep="")
+        _write_to_log("Matches written to " + output_csv + ". Starting to copy matching files.")
 
 def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
     """Write matching files to new directory."""
@@ -149,7 +178,7 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
     potential_duplicates = []
 
     for patient_id in paths_by_patient_id:
-        base_dir = os.getcwd() + '/' + copy_dir + '/' + patient_id
+        base_dir = os.getcwd() + '/' + copy_dir + '/' + str(patient_id)
         try:
             os.mkdir(base_dir)
         except:
@@ -169,7 +198,7 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
                 except:
                     potential_duplicates.append(os.path.basename(match) + '/')
 
-    print("Copy complete. Time it took to run: " + str(time.time() - t1) + " s.\n", sep="")
+    _write_to_log("Copy complete. Time it took to run: %.4f s.\n"  % (time.time() - t1))
 
     if len(potential_duplicates) > 0:
         easygui.msgbox('Copy complete. Potential file duplicates detected. Only the first one found was copied. See duplicates.log file.')
@@ -183,6 +212,7 @@ def main():
     # Default parameters. Can be converted to UI options if necessary.
     output_csv = 'FileCopyDirectory.csv'
     copy_dir = 'FileCopyResults'
+    logname = "FileCopyLogs_" + time.strftime("%m%d%H%M") + ".log"
 
     # Ask user for inputs
     ret = setup_ui()
