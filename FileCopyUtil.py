@@ -19,32 +19,12 @@ import easygui
 import os
 import re
 from shutil import copytree, copyfile
+import sys
 import time
 from xlrd import open_workbook
 from zipfile import ZipFile
 
 logname = None
-
-def find_number_in_filename(mrn, name_list, root=None):
-    """Return all members of a list of strings that contain a target MRN.
-
-    name_list: list of filenames and dir names to compare mrn against
-    mrn: mrn to search for, integer expected
-
-    If mrn = 550, matching names will include 't2scans550_01' and '00550.txt'
-    but exclude 'mri1550' and '5500.txt'.
-    .zip files in name_list will also be included if one of its members
-    is considered a match."""
-    mrn = str(mrn)
-
-    matches = []
-    for filename in name_list:
-        if _mrn_in_name(mrn, filename):
-            matches.append(filename)
-        elif filename.endswith('.zip') and _check_zip(mrn, root+'/'+filename):
-            matches.append(filename)
-
-    return matches
 
 def _write_to_log(msg, print_to_screen=True):
     """Append message to a file and print to screen."""
@@ -80,6 +60,27 @@ def _has_different_mrn(subdir, patient_ids):
     except ValueError:
         return False
 
+def find_number_in_filename(mrn, name_list, root=None):
+    """Return all members of a list of strings that contain a target MRN.
+
+    name_list: list of filenames and dir names to compare mrn against
+    mrn: mrn to search for, integer expected
+
+    If mrn = 550, matching names will include 't2scans550_01' and '00550.txt'
+    but exclude 'mri1550' and '5500.txt'.
+    .zip files in name_list will also be included if one of its members
+    is considered a match."""
+    mrn = str(mrn)
+
+    matches = []
+    for filename in name_list:
+        if _mrn_in_name(mrn, filename):
+            matches.append(filename)
+        elif filename.endswith('.zip') and _check_zip(mrn, root+'/'+filename):
+            matches.append(filename)
+
+    return matches
+
 def setup_ui(skip_col=False, skip_exc=False):
     """UI flow. Returns None if cancelled or terminated with error, else returns
     patient_ids, search_path and directories to exclude."""
@@ -112,14 +113,21 @@ def setup_ui(skip_col=False, skip_exc=False):
                                             "do not include slashes, and do not specify the path. e.g. animal, rabbit images, Alice's folder.")).split(', ')
             if len(exc_dirs) == 1 and exc_dirs[0] == '':
                 exc_dirs = []
-        except:
+        except TypeError:
             return None
 
     # Get list of MRNs to search
     ws = open_workbook(mrn_src).sheet_by_index(0)
+
+    header_offset = 0
     try:
-        patient_ids = [int(ws.cell(i, col).value) for i in range(ws.nrows)]
-    except:
+        int(ws.cell(0, col).value)
+    except ValueError:
+        header_offset = 1
+
+    try:
+        patient_ids = [int(ws.cell(i, col).value) for i in range(header_offset, ws.nrows)]
+    except ValueError:
         easygui.msgbox("Parsing error. May be due to wrong column selected or non-numeric entry present. This program will now exit.")
         return None
 
@@ -175,6 +183,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
             "Time it took to run: %.4f s.\n") % (dir_cnt, match_file_cnt, match_dir_cnt, time.time() - t1))
 
     with open('SearchHist.log', 'w') as f:
+        f.write('The following directories were searched for the run at %s:\n' % time.strftime("%x, %X"))
         f.write('\n'.join(searched_dirs))
 
     return paths_by_patient_id
@@ -201,22 +210,24 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
         base_dir = os.getcwd() + '/' + copy_dir + '/' + str(patient_id)
         try:
             os.mkdir(base_dir)
-        except:
+        except OSError:
             pass
 
         for match in paths_by_patient_id[patient_id]:
-            new_path = base_dir + '/' + os.path.basename(match)
+            new_name = base_dir + '/' + os.path.basename(match)
 
             if '.' in os.path.basename(match):
                 try:
-                    copyfile(match, new_path)
+                    copyfile(match, new_name) # no exception thrown when overwriting
                 except:
-                    potential_duplicates.append(os.path.basename(match))
+                    _write_to_log("Unexpected error in copying file %s: %s" % (match, str(sys.exc_info()[0])))
             else:
                 try:
-                    copytree(match, new_path)
-                except:
+                    copytree(match, new_name) # will raise exception when dir already exists
+                except FileExistsError:
                     potential_duplicates.append(os.path.basename(match) + '/')
+                except:
+                    _write_to_log("Unexpected error in copying directory %s: %s" % (match, str(sys.exc_info()[0])))
 
     _write_to_log("Copy complete. Time it took to run: %.4f s.\n"  % (time.time() - t1))
 
