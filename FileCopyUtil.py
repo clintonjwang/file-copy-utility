@@ -46,7 +46,12 @@ def _mrn_in_name(mrn, filename):
 
 def _check_zip(mrn, zip_file):
     """Check if any zip file members contain a target string in their filename."""
-    zip_members = ZipFile(zip_file).namelist()
+    try:
+        zip_members = ZipFile(zip_file).namelist()
+    except:
+        print("Error opening zip file %s: " % (zip_file, str(sys.exc_info()[0])))
+        return False
+
     for filename in zip_members:
         if _mrn_in_name(mrn, filename):
             return True
