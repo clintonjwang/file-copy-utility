@@ -10,9 +10,7 @@ Note: Before running this script, move its location into the drive or directory
 where you want the copied files to reside. This will likely be on an external
 hard drive unless your computer has lots of additional hard drive space. You
 should also move the excel document with the list of patient MRN's into this
-location  as well. """
-
-# TODO(clintonjwang): Account for MRNs starting with 0
+location as well. """
 
 from csv import writer as _writer
 import easygui
@@ -24,7 +22,6 @@ import time
 from xlrd import open_workbook
 from zipfile import ZipFile
 
-MRN_DIGITS = 7
 logname = None
 
 def _write_to_log(msg, print_to_screen=True):
@@ -36,8 +33,12 @@ def _write_to_log(msg, print_to_screen=True):
     if print_to_screen:
         print(msg)
 
+def _name_has_mrn(filename):
+    """Returns whether a filename likely contains some MRN (has 5+ digits in a row)."""
+    return re.search(r"\d{5,}", filename) is not None
+
 def _mrn_in_name(mrn, filename):
-    """Determines if an MRN (string, no leading zeros) is contained within a filename."""
+    """Determines if a specific MRN (string, but no leading zeros) is contained within a filename."""
     if mrn not in filename:
         return False
     else:
@@ -53,13 +54,13 @@ def _check_zip(mrn, zip_file):
     return False
 
 def _has_different_mrn(subdir, patient_ids):
-    """Returns True if subdir's name is a number that does not match one of the MRNs in patient_ids.
+    """Returns True if subdir's name has an MRN that does not match one of the MRNs in patient_ids.
     patient_ids should be a list of ints."""
     try: 
         i = int(subdir)
         return i not in patient_ids
     except ValueError:
-        return False
+        return _name_has_mrn(subdir)
 
 def _make_dir(new_dir):
     try:
@@ -96,7 +97,8 @@ def setup_ui(skip_col=False, skip_exc=False):
     if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs. '
                         'It will copy these files/folders to separate folders for each MRN. MRNs must be stored in an .xlsx or .xls format.\n'
                         'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file.\n'
-                        'WARNING: This assumes that folders labeled with one MRN will not contain files with another MRN.')):
+                        'WARNING: This assumes that folders labeled with one MRN will not contain files with another MRN.\n'
+                        'It assumes a folder is labeled with an MRN if it contains 5 or more digits in a row.')):
         return None
 
     mrn_src = easygui.fileopenbox(msg='Choose patient data sheet.', filetypes=["*.xlsx", "*.xls"])
@@ -165,7 +167,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=100):
             if exc_dir in subdirs:
                 subdirs.remove(exc_dir)
 
-        # exclude directories named a number that is not one of the target MRNs
+        # exclude directories with an MRN that is not one of the target MRNs
         for subdir in subdirs:
             if _has_different_mrn(subdir, patient_ids):
                 subdirs.remove(subdir)
