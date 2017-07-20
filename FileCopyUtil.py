@@ -23,7 +23,7 @@ import time
 from xlrd import open_workbook
 from zipfile import ZipFile
 
-logname = "FileCopyLogs.log"
+logname = None
 
 def find_number_in_filename(mrn, name_list, root=None):
     """Return all members of a list of strings that contain a target MRN.
@@ -47,9 +47,10 @@ def find_number_in_filename(mrn, name_list, root=None):
     return matches
 
 def _write_to_log(msg, print_to_screen=True):
-    """Append message to a file."""
-    with open(logname, 'a') as f:
-        f.write(msg + "\n")
+    """Append message to a file and print to screen."""
+    if logname is not None:
+        with open(logname, 'a') as f:
+            f.write(msg + "\n")
 
     if print_to_screen:
         print(msg)
@@ -70,13 +71,22 @@ def _check_zip(mrn, zip_file):
 
     return False
 
+def _has_different_mrn(subdir, patient_ids):
+    """Returns True if subdir's name is a number that does not match one of the MRNs in patient_ids.
+    patient_ids should be a list of ints."""
+    try: 
+        i = int(subdir)
+        return i not in patient_ids
+    except ValueError:
+        return False
+
 def setup_ui(skip_col=False, skip_exc=False):
     """UI flow. Returns None if cancelled or terminated with error, else returns
     patient_ids, search_path and directories to exclude."""
     if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs. '
                         'It will copy these files/folders to separate folders for each MRN. MRNs must be stored in an .xlsx or .xls format.\n'
                         'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file.\n'
-                        'WARNING: This assumes MRNs do not begin with 0 and have a fixed number of digits.')):
+                        'WARNING: This assumes that folders labeled with one MRN will not contain files with another MRN.')):
         return None
 
     mrn_src = easygui.fileopenbox(msg='Choose patient data sheet.', filetypes=["*.xlsx", "*.xls"])
@@ -127,14 +137,21 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
     match_dir_cnt = 0
     match_file_cnt = 0
     dir_cnt = 0
+    searched_dirs = []
 
     #search for matching folders/files
     for root, subdirs, files in os.walk(search_path):
+        searched_dirs.append(root)
 
         # exclude directories specified by user
         for exc_dir in exc_dirs:
             if exc_dir in subdirs:
                 subdirs.remove(exc_dir)
+
+        # exclude directories named a number that is not one of the target MRNs
+        for subdir in subdirs:
+            if _has_different_mrn(subdir, patient_ids):
+                subdirs.remove(subdir)
 
         for patient_id in patient_ids:
             matching_dirs = find_number_in_filename(patient_id, subdirs)
@@ -156,6 +173,9 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
 
     _write_to_log(("Search complete. %d directories explored, %d matching files found, and %d matching folders found. "
             "Time it took to run: %.4f s.\n") % (dir_cnt, match_file_cnt, match_dir_cnt, time.time() - t1))
+
+    with open('SearchHist.log', 'w') as f:
+        f.write('\n'.join(searched_dirs))
 
     return paths_by_patient_id
 
@@ -202,7 +222,7 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
 
     if len(potential_duplicates) > 0:
         easygui.msgbox('Copy complete. Potential file duplicates detected. Only the first one found was copied. See duplicates.log file.')
-        with open('duplicates.log', 'w') as f:
+        with open(copy_dir + '/duplicates.log', 'w') as f:
             f.write('\n'.join(potential_duplicates))
     else:
         easygui.msgbox('Copy complete.')
