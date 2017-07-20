@@ -24,6 +24,7 @@ import time
 from xlrd import open_workbook
 from zipfile import ZipFile
 
+MRN_DIGITS = 7
 logname = None
 
 def _write_to_log(msg, print_to_screen=True):
@@ -59,6 +60,14 @@ def _has_different_mrn(subdir, patient_ids):
         return i not in patient_ids
     except ValueError:
         return False
+
+def _make_dir(new_dir):
+    try:
+        os.mkdir(new_dir)
+    except FileExistsError:
+        pass
+    except:
+        print("Unexpected error in mkdir for %s: %s" % (new_dir, str(sys.exc_info()[0])))
 
 def find_number_in_filename(mrn, name_list, root=None):
     """Return all members of a list of strings that contain a target MRN.
@@ -108,9 +117,9 @@ def setup_ui(skip_col=False, skip_exc=False):
     if skip_exc:
         exc_dirs = []
     else:
+        exc_dirs = easygui.enterbox(msg=("Enter the name of any subfolders to exclude (case-sensitive). Leave blank to include all folders. Separate by commas, "
+                                        "do not include slashes, and do not specify the path. e.g. animal, rabbit images, Alice's folder.")).split(', ')
         try:
-            exc_dirs = easygui.enterbox(msg=("Enter the name of any subfolders to exclude (case-sensitive). Leave blank to include all folders. Separate by commas,"
-                                            "do not include slashes, and do not specify the path. e.g. animal, rabbit images, Alice's folder.")).split(', ')
             if len(exc_dirs) == 1 and exc_dirs[0] == '':
                 exc_dirs = []
         except TypeError:
@@ -135,7 +144,7 @@ def setup_ui(skip_col=False, skip_exc=False):
 
     return [patient_ids, search_path, exc_dirs]
 
-def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
+def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=100):
     """Get matching files and directories for each MRN."""
     t1 = time.time()
     # dict to store matching paths
@@ -175,9 +184,9 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, show_progress=True):
                 match_file_cnt += 1
 
         dir_cnt += 1
-        if show_progress and dir_cnt % 50 == 1:
+        if dir_cnt % log_freq == 1:
             _write_to_log(("%d directories explored, %d matching files found, and %d matching folders found. "
-                            "(Last directory explored: %s)") % (dir_cnt, match_file_cnt, match_dir_cnt, root))
+                        "(Last directory explored: %s at %s)") % (dir_cnt, match_file_cnt, match_dir_cnt, root, time.strftime("%X")))
 
     _write_to_log(("Search complete. %d directories explored, %d matching files found, and %d matching folders found. "
             "Time it took to run: %.4f s.\n") % (dir_cnt, match_file_cnt, match_dir_cnt, time.time() - t1))
@@ -201,20 +210,19 @@ def write_to_csv(paths_by_patient_id, output_csv, pause_before_copy=False):
     else:
         _write_to_log("Matches written to " + output_csv + ". Starting to copy matching files.")
 
-def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
+def copy_matching_files(paths_by_patient_id, copy_dir):
     """Write matching files to new directory."""
     t1 = time.time()
     potential_duplicates = []
 
+    _make_dir(os.getcwd() + '/' + copy_dir)
+
     for patient_id in paths_by_patient_id:
         if len(paths_by_patient_id[patient_id]) == 0:
-            next
+            continue
 
         base_dir = os.getcwd() + '/' + copy_dir + '/' + str(patient_id)
-        try:
-            os.mkdir(base_dir)
-        except OSError:
-            pass
+        _make_dir(base_dir)
 
         for match in paths_by_patient_id[patient_id]:
             new_name = base_dir + '/' + os.path.basename(match)
@@ -223,7 +231,8 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
                 try:
                     copyfile(match, new_name) # no exception thrown when overwriting
                 except:
-                    _write_to_log("Unexpected error in copying file %s: %s" % (match, str(sys.exc_info()[0])))
+                    print("Unexpected error in copying file %s to %s: %s" % (match, new_name, str(sys.exc_info()[0])))
+                    #_write_to_log("Unexpected error in copying file %s: %s" % (match, str(sys.exc_info()[0])))
             else:
                 try:
                     copytree(match, new_name) # will raise exception when dir already exists
