@@ -207,6 +207,9 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
     potential_duplicates = []
 
     for patient_id in paths_by_patient_id:
+        if len(paths_by_patient_id[patient_id]) == 0:
+            next
+
         base_dir = os.getcwd() + '/' + copy_dir + '/' + str(patient_id)
         try:
             os.mkdir(base_dir)
@@ -241,8 +244,8 @@ def copy_matching_files(paths_by_patient_id, copy_dir, show_progress=True):
 def main():
     """Starting point for script"""
     # Default parameters. Can be converted to UI options if necessary.
-    output_csv = 'FileCopyDirectory.csv'
-    copy_dir = 'FileCopyResults'
+    output_csv = 'MRN_Matches.csv'
+    copy_dir = 'FileCopies'
     logname = "FileCopyLogs_" + time.strftime("%m%d%H%M") + ".log"
 
     # Ask user for inputs
