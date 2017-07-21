@@ -34,8 +34,9 @@ def _write_to_log(msg, print_to_screen=True):
         print(msg)
 
 def _name_has_mrn(filename):
-    """Returns whether a filename likely contains some MRN (has 5+ digits in a row)."""
-    return re.search(r"\d{5,}", filename) is not None
+    """Returns whether a filename contains some MRN (has exactly 7 digits in a row).
+    False negatives are ok, but false positives are not, so the criteria for a match should be tight."""
+    return re.search(r"^(.*\D)?\d{7}(\D.*)?$", filename) is not None
 
 def _mrn_in_name(mrn, filename):
     """Determines if a specific MRN (string, but no leading zeros) is contained within a filename."""
@@ -48,8 +49,8 @@ def _check_zip(mrn, zip_file):
     """Check if any zip file members contain a target string in their filename."""
     try:
         zip_members = ZipFile(zip_file).namelist()
-    except:
-        print("Error opening zip file %s: " % (zip_file, str(sys.exc_info()[0])))
+    except Exception as e:
+        _write_to_log("Error opening zip file %s: %s, %s" % (zip_file, str(sys.exc_info()[0]), str(e)), print_to_screen=False)
         return False
 
     for filename in zip_members:
@@ -96,7 +97,7 @@ def find_number_in_filename(mrn, name_list, root=None):
 
     return matches
 
-def setup_ui(skip_col=False, skip_exc=False):
+def setup_ui(skip_col=False, skip_exc=True):
     """UI flow. Returns None if cancelled or terminated with error, else returns
     patient_ids, search_path and directories to exclude."""
     if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs. '
@@ -122,7 +123,7 @@ def setup_ui(skip_col=False, skip_exc=False):
         return None
 
     if skip_exc:
-        exc_dirs = []
+        exc_dirs = ["#recycle"]
     else:
         exc_dirs = easygui.enterbox(msg=("Enter the name of any subfolders to exclude (case-sensitive). Leave blank to include all folders. Separate by commas, "
                                         "do not include slashes, and do not specify the path. e.g. animal, rabbit images, Alice's folder.")).split(', ')
@@ -151,7 +152,7 @@ def setup_ui(skip_col=False, skip_exc=False):
 
     return [patient_ids, search_path, exc_dirs]
 
-def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=100):
+def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=50):
     """Get matching files and directories for each MRN."""
     t1 = time.time()
     # dict to store matching paths
@@ -176,6 +177,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=100):
         for subdir in subdirs:
             if _has_different_mrn(subdir, patient_ids):
                 subdirs.remove(subdir)
+                _write_to_log("Excluding folder %s because it's suspected to contain an irrelevant MRN" % subdir)
 
         for patient_id in patient_ids:
             matching_dirs = find_number_in_filename(patient_id, subdirs)
