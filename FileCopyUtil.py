@@ -164,7 +164,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=50):
     match_file_cnt = 0
     dir_cnt = 0
     searched_dirs = []
-    exc_dirs = []
+    skipped_dirs = []
 
     #search for matching folders/files
     for root, subdirs, files in os.walk(search_path):
@@ -175,27 +175,34 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=50):
             if exc_dir in subdirs:
                 exc_dirs.append(root + '/' + exc_dir)
                 subdirs.remove(exc_dir)
+                break
 
         # exclude directories with an MRN that is not one of the target MRNs
+        temp_exdirs = []
         for subdir in subdirs:
             if _has_different_mrn(subdir, patient_ids):
-                exc_dirs.append(root + '/' + subdir)
-                subdirs.remove(subdir)
+                skipped_dirs.append(root + '/' + subdir)
+                temp_exdirs.append(subdir)
                 _write_to_log("Excluding folder %s because it's suspected to contain an irrelevant MRN" % subdir, print_to_screen=False)
 
+        subdirs[:] = [d for d in subdirs if d not in temp_exdirs]
+
+        temp_exdirs = []
         for patient_id in patient_ids:
             matching_dirs = find_number_in_filename(patient_id, subdirs)
             matching_files = find_number_in_filename(patient_id, files, root)
 
             for matching_dir in matching_dirs:
                 paths_by_patient_id[patient_id].append(root + '/' + matching_dir)
-                subdirs.remove(matching_dir)
+                temp_exdirs.append(matching_dir)
                 match_dir_cnt += 1
 
             for matching_file in matching_files:
                 paths_by_patient_id[patient_id].append(root + '/' + matching_file)
                 match_file_cnt += 1
 
+        subdirs[:] = [d for d in subdirs if d not in temp_exdirs]
+        
         dir_cnt += 1
         if dir_cnt % log_freq == 1:
             _write_to_log(("%d directories explored, %d matching files found, and %d matching folders found. "
@@ -209,7 +216,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=50):
             f.write('The following directories were searched for the run at %s:\n' % time.strftime("%x, %X"))
             f.write('\n'.join(searched_dirs))
             f.write('\n\nThe following directories were excluded:\n')
-            f.write('\n'.join(exc_dirs))
+            f.write('\n'.join(skipped_dirs))
             f.write('\n\nDirectories not listed here are matches, or subfolders of a matching directory.')
     except:
         print("Unexpected error while writing search history: " % str(sys.exc_info()[0]))
