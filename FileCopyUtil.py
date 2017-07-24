@@ -14,6 +14,7 @@ location as well. """
 
 from csv import writer as _writer
 import easygui
+import io
 import os
 import re
 from shutil import copytree, copyfile
@@ -163,6 +164,7 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=50):
     match_file_cnt = 0
     dir_cnt = 0
     searched_dirs = []
+    exc_dirs = []
 
     #search for matching folders/files
     for root, subdirs, files in os.walk(search_path):
@@ -171,13 +173,15 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=50):
         # exclude directories specified by user
         for exc_dir in exc_dirs:
             if exc_dir in subdirs:
+                exc_dirs.append(root + '/' + exc_dir)
                 subdirs.remove(exc_dir)
 
         # exclude directories with an MRN that is not one of the target MRNs
         for subdir in subdirs:
             if _has_different_mrn(subdir, patient_ids):
+                exc_dirs.append(root + '/' + subdir)
                 subdirs.remove(subdir)
-                _write_to_log("Excluding folder %s because it's suspected to contain an irrelevant MRN" % subdir)
+                _write_to_log("Excluding folder %s because it's suspected to contain an irrelevant MRN" % subdir, print_to_screen=False)
 
         for patient_id in patient_ids:
             matching_dirs = find_number_in_filename(patient_id, subdirs)
@@ -200,9 +204,15 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=50):
     _write_to_log(("Search complete. %d directories explored, %d matching files found, and %d matching folders found. "
             "Time it took to run: %.4f s.\n") % (dir_cnt, match_file_cnt, match_dir_cnt, time.time() - t1))
 
-    with open('SearchHist.log', 'w') as f:
-        f.write('The following directories were searched for the run at %s:\n' % time.strftime("%x, %X"))
-        f.write('\n'.join(searched_dirs))
+    try:
+        with io.open('SearchHist.log', 'w', encoding='utf8') as f:
+            f.write('The following directories were searched for the run at %s:\n' % time.strftime("%x, %X"))
+            f.write('\n'.join(searched_dirs))
+            f.write('\n\nThe following directories were excluded:\n')
+            f.write('\n'.join(exc_dirs))
+            f.write('\n\nDirectories not listed here are matches, or subfolders of a matching directory.')
+    except:
+        print("Unexpected error while writing search history: " % str(sys.exc_info()[0]))
 
     return paths_by_patient_id
 
@@ -254,8 +264,11 @@ def copy_matching_files(paths_by_patient_id, copy_dir):
 
     if len(potential_duplicates) > 0:
         easygui.msgbox('Copy complete. Potential file duplicates detected. Only the first one found was copied. See duplicates.log file.')
-        with open(copy_dir + '/duplicates.log', 'w') as f:
-            f.write('\n'.join(potential_duplicates))
+        try:
+            with io.open(copy_dir + '/duplicates.log', 'w', encoding='utf8') as f:
+                f.write('\n'.join(potential_duplicates))
+        except:
+            print("Unexpected error while writing duplicate log: " % str(sys.exc_info()[0]))
     else:
         easygui.msgbox('Copy complete.')
 
