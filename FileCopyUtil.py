@@ -253,30 +253,30 @@ def copy_matching_files(paths_by_patient_id, copy_dir):
         for match in paths_by_patient_id[patient_id]:
             new_name = base_dir + '/' + os.path.basename(match)
 
+            while os.path.exists(new_name):
+                potential_duplicates.append(os.path.basename(new_name))
+                new_name += '+'
             if '.' in os.path.basename(match):
                 try:
                     copyfile(match, new_name) # no exception thrown when overwriting
                 except:
-                    print("Unexpected error in copying file %s to %s: %s" % (match, new_name, str(sys.exc_info()[0])))
-                    #_write_to_log("Unexpected error in copying file %s: %s" % (match, str(sys.exc_info()[0])))
+                    print("Unexpected error in copying file %s: %s" % (match, str(sys.exc_info()[0])))
             else:
                 try:
-                    copytree(match, new_name) # will raise exception when dir already exists
-                except FileExistsError:
-                    potential_duplicates.append(os.path.basename(match) + '/')
+                    copytree(match, new_name)
                 except:
                     _write_to_log("Unexpected error in copying directory %s: %s" % (match, str(sys.exc_info()[0])))
 
     _write_to_log("Copy complete. Time it took to run: %.4f s.\n"  % (time.time() - t1))
 
     if len(potential_duplicates) > 0:
-        easygui.msgbox('Copy complete. Potential file duplicates detected. Only the first one found was copied. See duplicates.log file.')
+        easygui.msgbox('Copy complete. Potential duplicates detected. Duplicates will have "+" added to the end of their name. See duplicates.log file.')
         try:
             with io.open(copy_dir + '/duplicates.log', 'w', encoding='utf8') as f:
                 f.write('\n'.join(potential_duplicates))
         except:
             print("Unexpected error while writing duplicate log: " % str(sys.exc_info()[0]))
-    else:
+    else:        
         easygui.msgbox('Copy complete.')
 
 def main():
