@@ -15,6 +15,7 @@ location as well. """
 from csv import writer as _writer
 import easygui
 import io
+import itertools
 import os
 import re
 from shutil import copytree, copyfile
@@ -124,7 +125,7 @@ def setup_ui(skip_col=False, skip_exc=True):
         return None
 
     if skip_exc:
-        exc_dirs = ["#recycle"]
+        exc_dirs = ["#recycle", "animal"]
     else:
         exc_dirs = easygui.enterbox(msg=("Enter the name of any subfolders to exclude (case-sensitive). Leave blank to include all folders. Separate by commas, "
                                         "do not include slashes, and do not specify the path. e.g. animal, rabbit images, Alice's folder.")).split(', ')
@@ -171,10 +172,10 @@ def get_matching_paths(patient_ids, search_path, exc_dirs, log_freq=50):
         searched_dirs.append(root)
 
         # exclude directories specified by user
-        for exc_dir in exc_dirs:
-            if exc_dir in subdirs:
+        for exc_dir, subdir in itertools.product(exc_dirs, subdirs):
+            if exc_dir in subdir:
                 exc_dirs.append(root + '/' + exc_dir)
-                subdirs.remove(exc_dir)
+                subdirs.remove(subdir)
                 break
 
         # exclude directories with an MRN that is not one of the target MRNs
