@@ -256,6 +256,13 @@ def copy_matching_files(paths_by_patient_id, copy_dir):
             while os.path.exists(new_name):
                 potential_duplicates.append(os.path.basename(new_name))
                 new_name += '+'
+                
+            #for zip files, just copy once to the main directory, and assume that any zips with the same name are duplicates
+            if match.endswith('.zip'):
+                new_name = os.getcwd() + '/' + copy_dir + '/' + os.path.basename(match)
+                if os.path.exists(new_name):
+                    continue
+                
             if '.' in os.path.basename(match):
                 try:
                     copyfile(match, new_name) # no exception thrown when overwriting
