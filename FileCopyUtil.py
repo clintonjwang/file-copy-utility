@@ -45,7 +45,7 @@ def _mrn_in_name(mrn, filename):
     if mrn not in filename:
         return False
     else:
-        return re.search("^(.*[^0-9])?0*" + str(mrn) + "([^0-9].*)?$", filename) is not None
+        return re.search("^(.*[^0-9])?0*" + mrn + "([^0-9].*)?$", filename) is not None
 
 def _check_zip(mrn, zip_file):
     """Check if any zip file members contain a target string in their filename."""
@@ -65,7 +65,7 @@ def _has_different_mrn(subdir, patient_ids):
     """Returns True if subdir's name has an MRN that does not match one of the MRNs in patient_ids.
     patient_ids should be a list of ints."""
     try: 
-        i = int(subdir)
+        i = subdir
         return i not in patient_ids
     except ValueError:
         return _name_has_mrn(subdir)
@@ -88,8 +88,6 @@ def find_number_in_filename(mrn, name_list, root=None):
     but exclude 'mri1550' and '5500.txt'.
     .zip files in name_list will also be included if one of its members
     is considered a match."""
-    mrn = str(mrn)
-
     matches = []
     for filename in name_list:
         if _mrn_in_name(mrn, filename):
@@ -102,22 +100,43 @@ def find_number_in_filename(mrn, name_list, root=None):
 def setup_ui(skip_col=False, skip_exc=True):
     """UI flow. Returns None if cancelled or terminated with error, else returns
     patient_ids, search_path and directories to exclude."""
-    if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs. '
-                        'It will copy these files/folders to separate folders for each MRN. MRNs must be stored in an .xlsx or .xls format.\n'
-                        'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file.\n'
-                        'WARNING: This assumes that folders labeled with one MRN will not contain files with another MRN.\n'
-                        'It assumes a folder is labeled with an MRN if it contains 5 or more digits in a row.')):
+    if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs or accession numbers. '
+                        'It will copy these files/folders to separate folders for each number. MRNs can be entered manually, or uploaded in .xlsx or .xls format.\n'
+                        'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file. Other compressed formats not supported.')):
         return None
 
-    mrn_src = easygui.fileopenbox(msg='Choose patient data sheet.', filetypes=["*.xlsx", "*.xls"])
-    if mrn_src is None:
+    patient_ids = easygui.enterbox(msg=('Enter accession numbers or MRNs to search for, separated by commas '
+                                    '(e.g. 12345678, E123456789, E234567890). Leave blank to upload an excel file instead.'))
+    if patient_ids is None:
         return None
-
-    if skip_col:
-        col = 0
     else:
-        col = easygui.integerbox(msg='Enter the column with patient MRNs (A=0, B=1, etc): ')
-        if col is None:
+        patient_ids = patient_ids.strip().split(',')
+
+    if patient_ids == [""]:
+        mrn_src = easygui.fileopenbox(msg='Choose excel sheet containing MRNs/accession numbers in a single column.', filetypes=["*.xlsx", "*.xls"])
+        if mrn_src is None:
+            return None
+
+        if skip_col:
+            col = 0
+        else:
+            col = easygui.integerbox(msg='Enter the column number containing MRNs (0 for column A, 1 for column B, etc). Headers are allowed.')
+            if col is None:
+                return None
+
+        # Get list of MRNs to search
+        ws = open_workbook(mrn_src).sheet_by_index(0)
+
+        header_offset = 0
+        try:
+            int(ws.cell(0, col).value)
+        except ValueError:
+            header_offset = 1
+
+        try:
+            patient_ids = [ws.cell(i, col).value for i in range(header_offset, ws.nrows)]
+        except ValueError:
+            easygui.msgbox("Parsing error. May be due to wrong column selected or non-numeric entry present. This program will now exit.")
             return None
 
     search_path = easygui.diropenbox(msg='Select a folder to search.')
@@ -125,7 +144,7 @@ def setup_ui(skip_col=False, skip_exc=True):
         return None
 
     if skip_exc:
-        exc_dirs = ["#recycle", "animal"]
+        exc_dirs = ["#recycle"]#, "animal"]
     else:
         exc_dirs = easygui.enterbox(msg=("Enter the name of any subfolders to exclude (case-sensitive). Leave blank to include all folders. Separate by commas, "
                                         "do not include slashes, and do not specify the path. e.g. animal, rabbit images, Alice's folder.")).split(', ')
@@ -135,20 +154,6 @@ def setup_ui(skip_col=False, skip_exc=True):
         except TypeError:
             return None
 
-    # Get list of MRNs to search
-    ws = open_workbook(mrn_src).sheet_by_index(0)
-
-    header_offset = 0
-    try:
-        int(ws.cell(0, col).value)
-    except ValueError:
-        header_offset = 1
-
-    try:
-        patient_ids = [int(ws.cell(i, col).value) for i in range(header_offset, ws.nrows)]
-    except ValueError:
-        easygui.msgbox("Parsing error. May be due to wrong column selected or non-numeric entry present. This program will now exit.")
-        return None
 
     _write_to_log("Searching for the following patients: " + str(patient_ids))
 
@@ -259,7 +264,7 @@ def copy_matching_files(paths_by_patient_id, copy_dir):
                 new_name += '+'
                 
             #for zip files, just copy once to the main directory, and assume that any zips with the same name are duplicates
-            if match.endswith('.zip'):
+            if match.endswith('.zip') or match.endswith('.zipx'):
                 new_name = os.getcwd() + '/' + copy_dir + '/' + os.path.basename(match)
                 if os.path.exists(new_name):
                     continue
@@ -290,9 +295,9 @@ def copy_matching_files(paths_by_patient_id, copy_dir):
 def main():
     """Starting point for script"""
     # Default parameters. Can be converted to UI options if necessary.
-    output_csv = 'MRN_Matches.csv'
+    output_csv = None#'MRN_Matches.csv'
     copy_dir = 'FileCopies'
-    logname = "FileCopyLogs_" + time.strftime("%m%d%H%M") + ".log"
+    logname = None#"FileCopyLogs_" + time.strftime("%m%d%H%M") + ".log"
 
     # Ask user for inputs
     ret = setup_ui()
@@ -305,7 +310,8 @@ def main():
     paths_by_patient_id = get_matching_paths(patient_ids, search_path, exc_dirs)
 
     # Write matches to csv
-    write_to_csv(paths_by_patient_id, output_csv)
+    if output_csv is not None:
+        write_to_csv(paths_by_patient_id, output_csv)
 
     # Write matching files to new directory
     copy_matching_files(paths_by_patient_id, copy_dir)
