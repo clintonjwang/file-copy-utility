@@ -17,6 +17,7 @@ import easygui
 import io
 import itertools
 import os
+from rarfile import RarFile
 import re
 from shutil import copytree, copyfile
 import sys
@@ -61,6 +62,20 @@ def _check_zip(mrn, zip_file):
 
     return False
 
+def _check_rar(mrn, rar_file):
+    """Check if any rar file members contain a target string in their filename."""
+    try:
+        rar_members = RarFile(rar_file).namelist()
+    except Exception as e:
+        _write_to_log("Error opening rar file %s: %s, %s" % (rar_file, str(sys.exc_info()[0]), str(e)), print_to_screen=False)
+        return False
+
+    for filename in rar_members:
+        if _mrn_in_name(mrn, filename):
+            return True
+
+    return False
+
 def _has_different_mrn(subdir, patient_ids):
     """Returns True if subdir's name has an MRN that does not match one of the MRNs in patient_ids.
     patient_ids should be a list of ints."""
@@ -86,13 +101,15 @@ def find_number_in_filename(mrn, name_list, root=None):
 
     If mrn = 550, matching names will include 't2scans550_01' and '00550.txt'
     but exclude 'mri1550' and '5500.txt'.
-    .zip files in name_list will also be included if one of its members
+    .zip/.rar files in name_list will also be included if one of its members
     is considered a match."""
     matches = []
     for filename in name_list:
         if _mrn_in_name(mrn, filename):
             matches.append(filename)
         elif filename.endswith('.zip') and _check_zip(mrn, root+'/'+filename):
+            matches.append(filename)
+        elif filename.endswith('.rar') and _check_rar(mrn, root+'/'+filename):
             matches.append(filename)
 
     return matches
@@ -102,7 +119,7 @@ def setup_ui(skip_col=False, skip_exc=True):
     patient_ids, search_path and directories to exclude."""
     if not easygui.msgbox(('This utility searches a directory to retrieve subfolders and filenames that contain MRNs or accession numbers. '
                         'It will copy these files/folders to separate folders for each number. MRNs can be entered manually, or uploaded in .xlsx or .xls format.\n'
-                        'NOTE: This program will search inside .zip files as well. If there is a match, it will copy the entire .zip file. Other compressed formats not supported.')):
+                        'NOTE: This program will search inside .zip/.rar files as well. If there is a match, it will copy the entire file. Other compressed formats not supported.')):
         return None
 
     patient_ids = easygui.enterbox(msg=('Enter accession numbers or MRNs to search for, separated by commas '
@@ -264,7 +281,7 @@ def copy_matching_files(paths_by_patient_id, copy_dir):
                 new_name += '+'
                 
             #for zip files, just copy once to the main directory, and assume that any zips with the same name are duplicates
-            if match.endswith('.zip') or match.endswith('.zipx'):
+            if match.endswith('.zip') or match.endswith('.rar'):
                 new_name = os.getcwd() + '/' + copy_dir + '/' + os.path.basename(match)
                 if os.path.exists(new_name):
                     continue
